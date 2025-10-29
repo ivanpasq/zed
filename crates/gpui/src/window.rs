@@ -822,6 +822,12 @@ impl Frame {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
+enum InputModality {
+    Mouse,
+    Keyboard,
+}
+
 /// Holds the state for a specific window.
 pub struct Window {
     pub(crate) handle: AnyWindowHandle,
@@ -870,7 +876,7 @@ pub struct Window {
     hovered: Rc<Cell<bool>>,
     pub(crate) needs_present: Rc<Cell<bool>>,
     pub(crate) last_input_timestamp: Rc<Cell<Instant>>,
-    last_input_was_keyboard: bool,
+    last_input_modality: InputModality,
     pub(crate) refreshing: bool,
     pub(crate) activation_observers: SubscriberSet<(), AnyObserver>,
     pub(crate) focus: Option<FocusId>,
@@ -1254,7 +1260,7 @@ impl Window {
             hovered,
             needs_present,
             last_input_timestamp,
-            last_input_was_keyboard: false,
+            last_input_modality: InputModality::Mouse,
             refreshing: false,
             activation_observers: SubscriberSet::new(),
             focus: None,
@@ -1911,7 +1917,7 @@ impl Window {
     /// Returns true if the last input event was keyboard-based (key press, tab navigation, etc.)
     /// This is used for focus-visible styling to show focus indicators only for keyboard navigation.
     pub fn last_input_was_keyboard(&self) -> bool {
-        self.last_input_was_keyboard
+        self.last_input_modality == InputModality::Keyboard
     }
 
     /// The current state of the keyboard's capslock
@@ -3256,14 +3262,11 @@ impl Window {
     /// returns a `Size`.
     ///
     /// This method should only be called as part of the request_layout or prepaint phase of element drawing.
-    pub fn request_measured_layout<
-        F: FnMut(Size<Option<Pixels>>, Size<AvailableSpace>, &mut Window, &mut App) -> Size<Pixels>
+    pub fn request_measured_layout<F>(&mut self, style: Style, measure: F) -> LayoutId
+    where
+        F: Fn(Size<Option<Pixels>>, Size<AvailableSpace>, &mut Window, &mut App) -> Size<Pixels>
             + 'static,
-    >(
-        &mut self,
-        style: Style,
-        measure: F,
-    ) -> LayoutId {
+    {
         self.invalidator.debug_assert_prepaint();
 
         let rem_size = self.rem_size();
@@ -3595,12 +3598,13 @@ impl Window {
         self.last_input_timestamp.set(Instant::now());
 
         // Track whether this input was keyboard-based for focus-visible styling
-        self.last_input_was_keyboard = matches!(
-            event,
-            PlatformInput::KeyDown(_)
-                | PlatformInput::KeyUp(_)
-                | PlatformInput::ModifiersChanged(_)
-        );
+        self.last_input_modality = match &event {
+            PlatformInput::KeyDown(_) | PlatformInput::ModifiersChanged(_) => {
+                InputModality::Keyboard
+            }
+            PlatformInput::MouseDown(e) if e.is_focusing() => InputModality::Mouse,
+            _ => self.last_input_modality,
+        };
 
         // Handlers may set this to false by calling `stop_propagation`.
         cx.propagate_event = true;

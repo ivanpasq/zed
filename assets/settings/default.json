@@ -1700,6 +1700,7 @@
       "preferred_line_length": 72
     },
     "Go": {
+      "hard_tabs": true,
       "code_actions_on_format": {
         "source.organizeImports": true
       },
@@ -1769,7 +1770,8 @@
       }
     },
     "Plain Text": {
-      "allow_rewrap": "anywhere"
+      "allow_rewrap": "anywhere",
+      "soft_wrap": "editor_width"
     },
     "Python": {
       "code_actions_on_format": {
